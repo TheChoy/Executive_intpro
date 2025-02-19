@@ -104,9 +104,9 @@ $result = mysqli_query($conn, $sqrt);
 
                         <label for="type">เพศ:</label>
                         <select id="" class="filter-select" name="gender">
-                            <option value="" selected>ทั้งหมด</option>
-                            <option value="male">ชาย</option>
-                            <option value="female">หญิง</option>
+                            <option value="ทั้งหมด" selected>ทั้งหมด</option>
+                            <option value="ชาย">ชาย</option>
+                            <option value="หญิง">หญิง</option>
                         </select>
 
 
