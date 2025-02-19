@@ -2,12 +2,12 @@
 include('username.php');
 
 // รับค่าจากฟอร์ม
-$month_year = isset($_POST['month_year']) ? $_POST['month_year'] : ''; 
-$gender = isset($_POST['gender']) ? $_POST['gender'] : '';  
-$type = isset($_POST['type']) ? $_POST['type'] : '';  
-$min_price = isset($_POST['min_age']) ? $_POST['min_age'] : 0;  
-$max_price = isset($_POST['max_age']) ? $_POST['max_age'] : 1000000;  
-$province = isset($_POST['province']) ? $_POST['province'] : '';  
+$month_year = isset($_POST['month_year']) ? $_POST['month_year'] : '';
+$gender = isset($_POST['gender']) ? $_POST['gender'] : '';
+$type = isset($_POST['type']) ? $_POST['type'] : '';
+$min_price = isset($_POST['min_age']) ? $_POST['min_age'] : 0;
+$max_price = isset($_POST['max_age']) ? $_POST['max_age'] : 1000000;
+$province = isset($_POST['province']) ? $_POST['province'] : '';
 
 // เริ่มต้นคำสั่ง SQL
 $sqrt = "SELECT * FROM `order`
@@ -35,7 +35,6 @@ if ($min_price > 0 || $max_price < 1000000) {
 if (!empty($province) && $province != 'ทั้งหมด') {
     $sqrt .= " AND member.member_province = '$province' ";
 }
-
 // รันคำสั่ง SQL
 $result = mysqli_query($conn, $sqrt);
 
@@ -188,8 +187,8 @@ $result = mysqli_query($conn, $sqrt);
                 <td>" . ($row['member_gender'] ?? 'Unknown') . "</td>
                 <td>" . ($row['order_date'] ?? 'No Date') . "</td>
                 <td>" . ($row['member_province'] ?? 'No Province') . "</td>
-                <td>" . ($row['order_total']?? '0')."</td>
-                <td>" . ($row['order_type']?? 'No type') . "</td>
+                <td>" . ($row['order_total'] ?? '0') . "</td>
+                <td>" . ($row['order_type'] ?? 'No type') . "</td>
               </tr>";
             }
             echo "</table>";
