@@ -5,8 +5,8 @@ include('username.php');
 $month_year = isset($_POST['month_year']) ? $_POST['month_year'] : '';
 $gender = isset($_POST['gender']) ? $_POST['gender'] : '';
 $type = isset($_POST['type']) ? $_POST['type'] : '';
-$min_price = isset($_POST['min_age']) ? $_POST['min_age'] : 0;
-$max_price = isset($_POST['max_age']) ? $_POST['max_age'] : 1000000;
+$min_price = isset($_POST['min_price']) ? $_POST['min_price'] : 0;
+$max_price = isset($_POST['max_price']) ? $_POST['max_price'] : 1000000;
 $province = isset($_POST['province']) ? $_POST['province'] : '';
 
 // เริ่มต้นคำสั่ง SQL
@@ -131,10 +131,10 @@ $result = mysqli_query($conn, $sqrt);
 
                         <label for="price">ช่วงราคา :</label>
                         <label for="min_price">ราคา (ต่ำสุด):</label>
-                        <input type="number" name="min_age" value="1" min="1" max="1000000">
+                        <input type="number" name="min_price" value="1" min="1" max="1000000">
 
                         <label for="max_price">ราคา (สูงสุด):</label>
-                        <input type="number" name="max_age" value="1000000" min="1" max="1000000">
+                        <input type="number" name="max_price" value="1000000" min="1" max="1000000">
 
                         <label for="province">จังหวัด:</label>
                         <select id="filter-price-list" class="filter-select" name="province">
@@ -241,7 +241,7 @@ $result = mysqli_query($conn, $sqrt);
                 <td>" . ($row['order_date'] ?? 'No Date') . "</td>
                 <td>" . ($row['member_province'] ?? 'No Province') . "</td>
                 <td>" . ($row['order_total'] ?? '0') . "</td>
-                <td>" . ($row['order_type'] ?? 'No type') . "</td>
+                <td>" . ($row['equipment_type'] ?? 'No type') . "</td>
               </tr>";
             }
             echo "</table>";
