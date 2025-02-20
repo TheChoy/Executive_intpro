@@ -2,42 +2,80 @@
 include('username.php');
 
 // รับค่าจากฟอร์ม
-$month_year = isset($_POST['month_year']) ? $_POST['month_year'] : '';
-$gender = isset($_POST['gender']) ? $_POST['gender'] : '';
-$type = isset($_POST['type']) ? $_POST['type'] : '';
-$min_price = isset($_POST['min_price']) ? $_POST['min_price'] : 0;
-$max_price = isset($_POST['max_price']) ? $_POST['max_price'] : 1000000;
-$province = isset($_POST['province']) ? $_POST['province'] : '';
+$selected_date = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
+$selected_gender = isset($_GET['gender']) ? $_GET['gender'] : "ทั้งหมด";
+$selected_type = isset($_GET['type']) ? $_GET['type'] : "ทั้งหมด";
+$min_price = isset($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
+$max_price = isset($_GET['max_price']) ? (int)$_GET['max_price'] : 1000000;
+$selected_province = isset($_GET['province']) ? $_GET['province'] : "ทั้งหมด";
+
+
+// สร้าง WHERE Clause ตามฟิลเตอร์ที่เลือก
+// ช่วงราคาสินค้า
+$where_clause = "WHERE order_total BETWEEN $min_price AND $max_price";
+// วันที่ซื้อสินค้า
+if ($selected_date) {
+    $where_clause .= " AND DATE(order_date) = '$selected_date'";
+}
+// เพศ
+if ($selected_gender !== "ทั้งหมด") {
+    $where_clause .= " AND member_gender = '$selected_gender'";
+}
+// ประเภทสินค้า
+if ($selected_type !== "ทั้งหมด") {
+    $where_clause .= " AND euiqment_type = '$selected_type'";
+}
+// จังหวัดที่อยู่ลูกค้า
+if ($selected_province !== "ทั้งหมด") {
+    $where_clause .= " AND member_province = '$selected_province'";
+}
+// ---------------------------------------------------------------------------
+
 
 // เริ่มต้นคำสั่ง SQL
-$sqrt = "SELECT * FROM `order`
-        JOIN `equipment` ON order.equipment_id = equipment.equipment_id
-        JOIN `member` ON order.member_id = member.member_id
-        WHERE 1=1";  // ใช้ WHERE 1=1 เพื่อง่ายต่อการต่อคำสั่ง
+$sqrt = "SELECT 
+        equipment_type,
+        SUM(CASE WHEN member_gender = 'ชาย' THEN 1 ELSE 0 END) AS male_count,
+        SUM(CASE WHEN member_gender = 'หญิง' THEN 1 ELSE 0 END) AS female_count
+        FROM `order`
+        JOIN `equipment` ON `order`.equipment_id = `equipment`.equipment_id
+        JOIN `member` ON `order`.member_id = `member`.member_id
+        WHERE order_total BETWEEN 0 AND 1000000
+        GROUP BY equipment_type;
+        ";  // ใช้ WHERE 1=1 เพื่อง่ายต่อการต่อคำสั่งเพิ่มเติม
 
-// เงื่อนไขการกรอง
-if (!empty($month_year)) {
-    $sqrt .= " AND DATE_FORMAT(order.order_date, '%Y-%m') = '$month_year' ";
-}
 
-if (!empty($gender) && $gender != 'ทั้งหมด') {
-    $sqrt .= " AND member.member_gender = '$gender' ";
-}
-
-if (!empty($type) && $type != 'ทั้งหมด') {
-    $sqrt .= " AND equipment.equipment_type = '$type' ";
-}
-
-if ($min_price > 0 || $max_price < 1000000) {
-    $sqrt .= " AND order.order_total BETWEEN $min_price AND $max_price ";
-}
-
-if (!empty($province) && $province != 'ทั้งหมด') {
-    $sqrt .= " AND member.member_province = '$province' ";
-}
-
-// รันคำสั่ง SQL
 $result = mysqli_query($conn, $sqrt);
+
+// ---------------------------------------------------------------------------------
+// เตรียมข้อมูลสำหรับกราฟ
+$labels = [];
+$maleData = [];
+$femaleData = [];
+
+if ($result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $labels[] = $row['equipment_type'];
+        $maleData[] = $row['male_count'];
+        $femaleData[] = $row['female_count'];
+    }
+}
+
+// Query ดึงข้อมูลจังหวัด
+$province_query = "SELECT DISTINCT member_province FROM member";
+$province_result = $conn->query($province_query);
+
+$province_options = [];
+if ($province_result->num_rows > 0) {
+    while ($row = $province_result->fetch_assoc()) {
+        $province_options[] = $row['member_province'];
+    }
+}
+
+// ปิดการเชื่อมต่อฐานข้อมูล
+$conn->close();
+
+
 
 ?>
 
@@ -58,6 +96,33 @@ $result = mysqli_query($conn, $sqrt);
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="summary_page.js" defer></script>
     <title>สรุปยอดขาย</title>
+    <style>
+        canvas {
+            width: 80% !important;
+            height: 60% !important;
+            max-width: 800px;
+            max-height: 600px;
+            margin: auto;
+            display: block;
+        }
+
+        .filter-container {
+            text-align: center;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .age-input {
+            width: 60px;
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
 </head>
 
 <body>
@@ -77,6 +142,12 @@ $result = mysqli_query($conn, $sqrt);
     </header>
 
     <main class="main-content">
+
+        <div id="chart-labels" style="display: none;"><?php echo json_encode($labels); ?></div>
+        <div id="chart-maleData" style="display: none;"><?php echo json_encode($maleData); ?></div>
+        <div id="chart-femaleData" style="display: none;"><?php echo json_encode($femaleData); ?></div>
+
+
         <h1 style="text-align: center;">สรุปยอดขาย</h1>
         <div class="search-section">
             <!-- <div class="search-container">
@@ -96,33 +167,35 @@ $result = mysqli_query($conn, $sqrt);
                     <h2>ตัวกรอง</h2>
                     <button class="close-sidebar">&times;</button>
                 </div>
-                <form method="post" action="">
-                    <div class="sidebar-content">
-                        <!-- ใส่ Filter ตรงนี้ -->
-                        <label for="month_year">ปี/เดือน:</label>
-                        <input type="month" name="month_year" value="2025-01"> ถึง
-                        <!-- <input class="month-selected" id="calendarSelect" type="text" placeholder="ปี/เดือน" value="2025-01"> -->
 
-                        <label for="type">เพศ:</label>
-                        <select id="" class="filter-select" name="gender">
-                            <option value="ทั้งหมด" selected>ทั้งหมด</option>
-                            <option value="ชาย">ชาย</option>
-                            <option value="หญิง">หญิง</option>
-                        </select>
+                <div class="sidebar-content">
+                    <!-- ใส่ Filter ตรงนี้ -->
 
 
-                        <label for="type">ประเภทสินค้า:</label>
-                        <select id="" class="filter-select" name="type">
-                            <option value="ทั้งหมด">ทั้งหมด</option>
-                            <option value="อุปกรณ์วัดและตรวจสุขภาพ">อุปกรณ์วัดและตรวจสุขภาพ</option>
-                            <option value="อุปกรณ์ช่วยการเคลื่อนไหว">อุปกรณ์ช่วยการเคลื่อนไหว</option>
-                            <option value="อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด">อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด</option>
-                            <option value="อุปกรณ์ดูแลสุขอนามัย">อุปกรณ์ดูแลสุขอนามัย</option>
-                            <option value="อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ">อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ</option>
-                            <option value="อุปกรณ์ปฐมพยาบาล">อุปกรณ์ปฐมพยาบาล</option>
-                        </select>
+                    <label for="calendarSelect">ปี/เดือน:</label>
+                    <input class="calendar-selected" id="calendarSelect" type="text" placeholder="เลือกวันที่" value="2025-01-22">
+                    <!-- <input class="month-selected" id="calendarSelect" type="text" placeholder="ปี/เดือน" value="2025-01"> -->
 
-                        <!-- <label for="">ช่วงราคาสินค้า:</label>
+                    <label for="filter-gender">เพศ:</label>
+                    <select id="filter-gender-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_gender == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <option value="ชาย" <?php if ($selected_gender == "ชาย") echo "selected"; ?>>ชาย</option>
+                        <option value="หญิง" <?php if ($selected_gender == "หญิง") echo "selected"; ?>>หญิง</option>
+                    </select>
+
+
+                    <label for="filter-type">ประเภทสินค้า:</label>
+                    <select id="filter-type-list" class="filter-select" name="type">
+                        <option value="ทั้งหมด" <?php if ($selected_type == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <option value="อุปกรณ์วัดและตรวจสุขภาพ" <?php if ($selected_type == "อุปกรณ์วัดและตรวจสุขภาพ") echo "selected"; ?>>อุปกรณ์วัดและตรวจสุขภาพ</option>
+                        <option value="อุปกรณ์ช่วยการเคลื่อนไหว" <?php if ($selected_type == "อุปกรณ์ช่วยการเคลื่อนไหว") echo "selected"; ?>>อุปกรณ์ช่วยการเคลื่อนไหว</option>
+                        <option value="อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด" <?php if ($selected_type == "อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด") echo "selected"; ?>>อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด</option>
+                        <option value="อุปกรณ์ดูแลสุขอนามัย" <?php if ($selected_type == "อุปกรณ์ดูแลสุขอนามัย") echo "selected"; ?>>อุปกรณ์ดูแลสุขอนามัย</option>
+                        <option value="อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ" <?php if ($selected_type == "อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ") echo "selected"; ?>>อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ</option>
+                        <option value="อุปกรณ์ปฐมพยาบาล" <?php if ($selected_type == "อุปกรณ์ปฐมพยาบาล") echo "selected"; ?>>อุปกรณ์ปฐมพยาบาล</option>
+                    </select>
+
+                    <!-- <label for="">ช่วงราคาสินค้า:</label>
                         <div class="price-range">
                             <input type="number" id="minPrice" placeholder="ต่ำสุด" min="0" max="1000000" value="0">
                             <input type="range" id="minPriceRange" min="0" max="1000000" step="100" value="0" oninput="updateMinPrice()">
@@ -130,126 +203,194 @@ $result = mysqli_query($conn, $sqrt);
                             <input type="number" id="maxPrice" placeholder="สูงสุด" min="0" max="1000000" value="1000000">
                         </div><br> -->
 
-                        <label for="price">ช่วงราคา :</label>
-                        <label for="min_price">ราคา (ต่ำสุด):</label>
-                        <input type="number" name="min_price" value="1" min="1" max="1000000">
+                    <label for="price">ช่วงราคา :</label>
+                    <label for="min_price">ราคา (ต่ำสุด):</label>
 
-                        <label for="max_price">ราคา (สูงสุด):</label>
-                        <input type="number" name="max_price" value="1000000" min="1" max="1000000">
+                    <input type="number" id="minPrice" class="price-input" name="min_price" value="<?php echo $min_price; ?>" min="0" max="1000000">
 
-                        <label for="province">จังหวัด:</label>
-                        <select id="filter-price-list" class="filter-select" name="province">
-                            <option value="" selected hidden>ทั้งหมด</option>
-                            <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
-                            <option value="กระบี่">กระบี่</option>
-                            <option value="กาญจนบุรี">กาญจนบุรี</option>
-                            <option value="กาฬสินธุ์">กาฬสินธุ์</option>
-                            <option value="กำแพงเพชร">กำแพงเพชร</option>
-                            <option value="ขอนแก่น">ขอนแก่น</option>
-                            <option value="จันทบุรี">จันทบุรี</option>
-                            <option value="ฉะเชิงเทรา">ฉะเชิงเทรา</option>
-                            <option value="ชลบุรี">ชลบุรี</option>
-                            <option value="ชัยนาท">ชัยนาท</option>
-                            <option value="ชัยภูมิ">ชัยภูมิ</option>
-                            <option value="ชุมพร">ชุมพร</option>
-                            <option value="เชียงราย">เชียงราย</option>
-                            <option value="เชียงใหม่">เชียงใหม่</option>
-                            <option value="ตรัง">ตรัง</option>
-                            <option value="ตราด">ตราด</option>
-                            <option value="ตาก">ตาก</option>
-                            <option value="นครนายก">นครนายก</option>
-                            <option value="นครปฐม">นครปฐม</option>
-                            <option value="นครพนม">นครพนม</option>
-                            <option value="นครราชสีมา">นครราชสีมา</option>
-                            <option value="นครศรีธรรมราช">นครศรีธรรมราช</option>
-                            <option value="นครสวรรค์">นครสวรรค์</option>
-                            <option value="นนทบุรี">นนทบุรี</option>
-                            <option value="นราธิวาส">นราธิวาส</option>
-                            <option value="น่าน">น่าน</option>
-                            <option value="บึงกาฬ">บึงกาฬ</option>
-                            <option value="บุรีรัมย์">บุรีรัมย์</option>
-                            <option value="ปทุมธานี">ปทุมธานี</option>
-                            <option value="ประจวบคีรีขันธ์">ประจวบคีรีขันธ์</option>
-                            <option value="ปราจีนบุรี">ปราจีนบุรี</option>
-                            <option value="ปัตตานี">ปัตตานี</option>
-                            <option value="พะเยา">พะเยา</option>
-                            <option value="พระนครศรีอยุธยา">พระนครศรีอยุธยา</option>
-                            <option value="พังงา">พังงา</option>
-                            <option value="พัทลุง">พัทลุง</option>
-                            <option value="พิจิตร">พิจิตร</option>
-                            <option value="พิษณุโลก">พิษณุโลก</option>
-                            <option value="เพชรบุรี">เพชรบุรี</option>
-                            <option value="เพชรบูรณ์">เพชรบูรณ์</option>
-                            <option value="แพร่">แพร่</option>
-                            <option value="ภูเก็ต">ภูเก็ต</option>
-                            <option value="มหาสารคาม">มหาสารคาม</option>
-                            <option value="มุกดาหาร">มุกดาหาร</option>
-                            <option value="แม่ฮ่องสอน">แม่ฮ่องสอน</option>
-                            <option value="ยโสธร">ยโสธร</option>
-                            <option value="ยะลา">ยะลา</option>
-                            <option value="ร้อยเอ็ด">ร้อยเอ็ด</option>
-                            <option value="ระนอง">ระนอง</option>
-                            <option value="ระยอง">ระยอง</option>
-                            <option value="ราชบุรี">ราชบุรี</option>
-                            <option value="ลพบุรี">ลพบุรี</option>
-                            <option value="ลำปาง">ลำปาง</option>
-                            <option value="ลำพูน">ลำพูน</option>
-                            <option value="เลย">เลย</option>
-                            <option value="ศรีสะเกษ">ศรีสะเกษ</option>
-                            <option value="สกลนคร">สกลนคร</option>
-                            <option value="สงขลา">สงขลา</option>
-                            <option value="สตูล">สตูล</option>
-                            <option value="สมุทรปราการ">สมุทรปราการ</option>
-                            <option value="สมุทรสงคราม">สมุทรสงคราม</option>
-                            <option value="สมุทรสาคร">สมุทรสาคร</option>
-                            <option value="สระแก้ว">สระแก้ว</option>
-                            <option value="สระบุรี">สระบุรี</option>
-                            <option value="สิงห์บุรี">สิงห์บุรี</option>
-                            <option value="สุโขทัย">สุโขทัย</option>
-                            <option value="สุพรรณบุรี">สุพรรณบุรี</option>
-                            <option value="สุราษฎร์ธานี">สุราษฎร์ธานี</option>
-                            <option value="สุรินทร์">สุรินทร์</option>
-                            <option value="หนองคาย">หนองคาย</option>
-                            <option value="หนองบัวลำภู">หนองบัวลำภู</option>
-                            <option value="อ่างทอง">อ่างทอง</option>
-                            <option value="อุดรธานี">อุดรธานี</option>
-                            <option value="อุตรดิตถ์">อุตรดิตถ์</option>
-                            <option value="อุทัยธานี">อุทัยธานี</option>
-                            <option value="อุบลราชธานี">อุบลราชธานี</option>
-                            <option value="อำนาจเจริญ">อำนาจเจริญ</option>
-                        </select>
-                        <input type="submit" value="กรองข้อมูล">
-                </form>
+                    <label for="max_price">ราคา (สูงสุด):</label>
+                    <input type="number" id="maxPrice" class="price-input" name="max_price" value="<?php echo $max_price; ?>" min="0" max="1000000">
+
+
+                    <label for="filter-province-list">จังหวัด:</label>
+                    <select id="filter-province-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_province === "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <?php foreach ($province_options as $province) : ?>
+                            <option value="<?php echo htmlspecialchars($province); ?>"
+                                <?php if ($selected_province === $province) echo "selected"; ?>>
+                                <?php echo htmlspecialchars($province); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
-        </div>
     </main>
-    <div class="content">
-        <?php
-        if ($result->num_rows > 0) {
-            echo "<table border='1'>";
-            echo "<tr><th>Member ID</th>
-            <th>เพศ</th>
-            <th>Order Date</th> 
-            <th>Province</th>
-            <th>Price</th>
-            <th>type</th>
-            </tr>";
 
-            while ($row = $result->fetch_assoc()) {
-                echo "<tr>
-                <td>" . ($row['member_id'] ?? 'N/A') . "</td>
-                <td>" . ($row['member_gender'] ?? 'Unknown') . "</td>
-                <td>" . ($row['order_date'] ?? 'No Date') . "</td>
-                <td>" . ($row['member_province'] ?? 'No Province') . "</td>
-                <td>" . ($row['order_total'] ?? '0') . "</td>
-                <td>" . ($row['equipment_type'] ?? 'No type') . "</td>
-              </tr>";
+    <canvas id="summary"></canvas>
+    <?php
+    echo "<pre>";
+    print_r($labels);
+    print_r($maleData);
+    print_r($femaleData);
+    echo "</pre>";
+
+    ?>
+    <!-- graph -->
+    <script>
+        // รับข้อมูลจาก PHP เพื่อใช้ในกราฟ
+        const labels = <?php echo json_encode($labels); ?>;
+        const maleData = <?php echo json_encode($maleData); ?>;
+        const femaleData = <?php echo json_encode($femaleData); ?>;
+
+
+        // สร้างกราฟด้วย Chart.js
+        const mychart = new Chart(document.getElementById("summary"), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'ชาย',
+                    data: maleData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }, {
+                    label: 'หญิง',
+                    data: femaleData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'ประเภทสินค้า'
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'จำนวนยอดสินค้า'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'สรุปยอดขายสินค้า',
+                        font: {
+                            size: 18
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 20,
+                            padding: 15
+                        }
+                    }
+                }
             }
-            echo "</table>";
-        } else {
-            echo "No results found.";
+        });
+
+        // สคริปต์สำหรับเปิด-ปิด Sidebar
+        document.addEventListener("DOMContentLoaded", () => {
+            const filterIcon = document.querySelector(".filter-icon");
+            const sidebar = document.getElementById("filterSidebar");
+            const closeSidebar = document.querySelector(".close-sidebar");
+
+            // เปิด Sidebar
+            filterIcon.addEventListener("click", () => {
+                sidebar.classList.add("open");
+            });
+
+            // ปิด Sidebar
+            closeSidebar.addEventListener("click", () => {
+                sidebar.classList.remove("open");
+            });
+
+            // ปิด Sidebar เมื่อคลิกนอก Sidebar
+            document.addEventListener("click", (e) => {
+                if (!sidebar.contains(e.target) && !filterIcon.contains(e.target)) {
+                    sidebar.classList.remove("open");
+                }
+            });
+        });
+
+        // ตั้งค่า Flatpickr สำหรับเลือกวันที่
+        flatpickr("#calendarSelect", {
+            dateFormat: "Y-m-d",
+            defaultDate: "<?php echo $selected_date; ?>",
+            onChange: updateFilters
+        });
+
+        // ฟังก์ชันสำหรับอัปเดตฟิลเตอร์และโหลดข้อมูลใหม่
+        // ฟังก์ชันสำหรับอัปเดตฟิลเตอร์และโหลดข้อมูลใหม่
+        function updateFilters() {
+            const date = document.getElementById("calendarSelect").value;
+            const gender = document.getElementById("filter-gender-list").value;
+            const minPrice = document.getElementById("minPrice").value;
+            const maxPrice = document.getElementById("maxPrice").value;
+            const type = document.getElementById("filter-type-list").value;
+            const province = document.getElementById("filter-province-list").value;
+
+            // สร้าง URL Query
+            const params = new URLSearchParams({
+                date,
+                gender,
+                min_price: minPrice,
+                max_price: maxPrice,
+                type,
+                province,
+            });
+
+            // อัปเดต URL โดยไม่โหลดหน้าใหม่
+            const newUrl = window.location.pathname + "?" + params.toString();
+            window.history.replaceState({}, "", newUrl);
+
+            // โหลดข้อมูลใหม่ผ่าน AJAX
+            fetch(newUrl)
+                .then(response => response.json()) // ตรวจสอบการตอบกลับเป็น JSON
+                .then(data => {
+                    // ตรวจสอบว่าได้ข้อมูลจาก server หรือไม่
+                    if (data) {
+                        const newLabels = data.labels;
+                        const newMaleData = data.maleData;
+                        const newFemaleData = data.femaleData;
+
+                        // อัปเดตกราฟ Chart.js
+                        mychart.data.labels = newLabels;
+                        mychart.data.datasets[0].data = newMaleData;
+                        mychart.data.datasets[1].data = newFemaleData;
+                        mychart.update();
+                    } else {
+                        console.error('No data received.');
+                    }
+                })
+                .catch(error => console.error('Error fetching updated data:', error));
         }
-        ?>
+
+
+
+
+        // ตั้งค่า Event Listeners สำหรับฟิลเตอร์
+        document.getElementById("calendarSelect").flatpickr({
+            dateFormat: "Y-m-d",
+            onChange: updateFilters
+        });
+        document.getElementById("filter-gender-list").addEventListener("change", updateFilters);
+        document.getElementById("filter-type-list").addEventListener("change", updateFilters);
+        document.getElementById("minPrice").addEventListener("input", updateFilters);
+        document.getElementById("maxPrice").addEventListener("input", updateFilters);
+        document.getElementById("filter-province-list").addEventListener("change", updateFilters);
+    </script>
 
     </div>
 </body>
