@@ -358,7 +358,7 @@ $result = mysqli_query($conn, $sql);
                     },
                     title: {
                         display: true,
-                        text: 'จำนวนการขายตามประเภทสินค้า'
+                        text: 'จำนวนยอดขาย'
                     },
                     tooltip: {
                         callbacks: {
