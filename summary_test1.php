@@ -1,63 +1,134 @@
 <?php
+// ตั้งค่าการเชื่อมต่อฐานข้อมูล
 include('username.php');
 
-// รับค่าจากฟอร์ม
-$month_year = isset($_POST['month_year']) ? $_POST['month_year'] : '';
-$gender = isset($_POST['gender']) ? $_POST['gender'] : '';
-$type = isset($_POST['type']) ? $_POST['type'] : '';
-$min_price = isset($_POST['min_price']) ? $_POST['min_price'] : 0;
-$max_price = isset($_POST['max_price']) ? $_POST['max_price'] : 1000000;
-$province = isset($_POST['province']) ? $_POST['province'] : '';
+// รับค่าฟิลเตอร์จาก GET parameters
+$min_age = isset($_GET['min_age']) ? (int)$_GET['min_age'] : 0;
+$max_age = isset($_GET['max_age']) ? (int)$_GET['max_age'] : 100;
+$selected_date = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
+$selected_gender = isset($_GET['gender']) ? $_GET['gender'] : "ทั้งหมด";
+$selected_symptom = isset($_GET['symptom']) ? $_GET['symptom'] : "ทั้งหมด";
+$selected_hospital = isset($_GET['hospital']) ? $_GET['hospital'] : "ทั้งหมด";
+$selected_zone = isset($_GET['zone']) ? $_GET['zone'] : "ทั้งหมด";
 
-// เริ่มต้นคำสั่ง SQL
-$sql = "SELECT * FROM `order`
-        JOIN `equipment` ON order.equipment_id = equipment.equipment_id
-        JOIN `member` ON order.member_id = member.member_id
-        WHERE 1=1";
-
-// เงื่อนไขการกรอง
-if (!empty($month_year)) {
-    $sql .= " AND DATE_FORMAT(order.order_date, '%Y-%m') = '$month_year' ";
+// สร้าง WHERE Clause ตามฟิลเตอร์ที่เลือก
+$where_clause = "WHERE emergency_case_report_patient_age BETWEEN $min_age AND $max_age";
+if ($selected_date) {
+    $where_clause .= " AND DATE(emergency_case_report_date) = '$selected_date'";
+}
+if ($selected_gender !== "ทั้งหมด") {
+    $where_clause .= " AND emergency_case_report_patient_gender = '$selected_gender'";
+}
+if ($selected_symptom !== "ทั้งหมด") {
+    if ($selected_symptom === "อื่นๆ") {
+        $where_clause .= " AND emergency_case_report_reason NOT LIKE '%อุบัติเหตุ%' AND emergency_case_report_reason NOT LIKE '%อาการป่วย%'";
+    } else {
+        $where_clause .= " AND emergency_case_report_reason LIKE '%$selected_symptom%'";
+    }
+}
+if ($selected_hospital !== "ทั้งหมด") {
+    $where_clause .= " AND emergency_case_report_hospital_waypoint = '$selected_hospital'";
+}
+if ($selected_zone !== "ทั้งหมด") {
+    $where_clause .= " AND emergency_case_emergency_case_zone = '$selected_zone'";
 }
 
-if (!empty($gender) && $gender != 'ทั้งหมด') {
-    $sql .= " AND member.member_gender = '$gender' ";
+// Query ดึงข้อมูล
+$sql = "SELECT 
+    report_reason,
+    SUM(CASE WHEN emergency_case_report_patient_gender = 'ชาย' THEN 1 ELSE 0 END) as male_count,
+    SUM(CASE WHEN emergency_case_report_patient_gender = 'หญิง' THEN 1 ELSE 0 END) as female_count
+    FROM emergency_case 
+    $where_clause
+    GROUP BY emergency_case_report_reason";
+
+$result = $conn->query($sql);
+
+// เตรียมข้อมูลสำหรับกราฟ
+$labels = [];
+$maleData = [];
+$femaleData = [];
+
+if ($result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $labels[] = $row['report_reason'];
+        $maleData[] = $row['male_count'];
+        $femaleData[] = $row['female_count'];
+    }
 }
 
-if (!empty($type) && $type != 'ทั้งหมด') {
-    $sql .= " AND equipment.equipment_type = '$type' ";
+// Query ดึงข้อมูลโรงพยาบาล
+$hospital_query = "SELECT DISTINCT hospital_waypoint FROM emergency_case";
+$hospital_result = $conn->query($hospital_query);
+
+$hospital_options = [];
+if ($hospital_result->num_rows > 0) {
+    while ($row = $hospital_result->fetch_assoc()) {
+        $hospital_options[] = $row['hospital_waypoint'];
+    }
 }
 
-if ($min_price > 0 || $max_price < 1000000) {
-    $sql .= " AND order.order_total BETWEEN $min_price AND $max_price ";
+// Query ดึงข้อมูลเขตพื้นที่เกิดเหตุ
+$zone_query = "SELECT DISTINCT emergency_case_zone FROM emergency_case";
+$zone_result = $conn->query($zone_query);
+
+$zone_options = [];
+if ($zone_result->num_rows > 0) {
+    while ($row = $zone_result->fetch_assoc()) {
+        $zone_options[] = $row['emergency_case_zone'];
+    }
 }
 
-if (!empty($province) && $province != 'ทั้งหมด') {
-    $sql .= " AND member.member_province = '$province' ";
-}
-
-// รันคำสั่ง SQL
-$result = mysqli_query($conn, $sql);
-
+// ปิดการเชื่อมต่อฐานข้อมูล
+$conn->close();
 ?>
 
-
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+    <title>ดูรายงานเคส</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="summary_page.js" defer></script>
-    <title>สรุปยอดขาย</title>
+    <style>
+        canvas {
+            width: 80% !important;
+            height: 60% !important;
+            max-width: 800px;
+            max-height: 600px;
+            margin: auto;
+            display: block;
+        }
+
+        .filter-container {
+            text-align: center;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .age-input {
+            width: 60px;
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+    </style>
 </head>
 
 <body>
@@ -69,334 +140,234 @@ $result = mysqli_query($conn, $sql);
         <nav class="nav" style="margin-left: 20%;">
             <a href="approve_page.html" class="nav-item">อนุมัติคำสั่งซื้อ/เช่า</a>
             <a href="approve_clam_page.html" class="nav-item">อนุมัติเคลม</a>
-            <a href="summary_page.html" class="nav-item active">สรุปยอดขาย</a>
-            <a href="case_report_page.html" class="nav-item">ดูสรุปรายงานเคส</a>
+            <a href="summary_page.html" class="nav-item">สรุปยอดขาย</a>
+            <a href="case_report_page.html" class="nav-item active">ดูสรุปรายงานเคส</a>
             <a href="history_fixed_page.html" class="nav-item">ประวัติการส่งซ่อมรถและอุปกรณ์การแพทย์</a>
             <a href="static_car_page.html" class="nav-item">สถิติการใช้งานรถ</a>
         </nav>
     </header>
 
+    <div id="chart-labels" style="display: none;"><?php echo json_encode($labels); ?></div>
+    <div id="chart-maleData" style="display: none;"><?php echo json_encode($maleData); ?></div>
+    <div id="chart-femaleData" style="display: none;"><?php echo json_encode($femaleData); ?></div>
+
+    <h1 style="text-align: center;">ดูสรุปรายงานเคสฉุกเฉิน</h1>
     <main class="main-content">
-        <h1 style="text-align: center;">สรุปยอดขาย</h1>
         <div class="search-section">
-            <!-- <div class="search-container">
-                <input type="text" placeholder="ระบุชื่อสินค้า..." class="search-input">
-                <button class="search-button">
-                    <i class="fa-solid fa-magnifying-glass"></i> ไอคอนแว่นขยาย
-                </button>
-            </div> -->
             <div class="filter-icon">
-                <i class="fa-solid fa-filter"></i> <!--ไอคอน Filter-->
+                <i class="fa-solid fa-filter"></i> <!-- ไอคอน Filter -->
             </div>
 
+            <div class="filter-sidebar" id="filterSidebar">
+                <div class="sidebar-header">
+                    <h2>ตัวกรอง</h2>
+                    <button class="close-sidebar">&times;</button>
+                </div>
+                <div class="sidebar-content">
+                    <label for="calendarSelect">เลือกวันที่:</label>
+                    <input class="calendar-selected" id="calendarSelect" type="text" placeholder="เลือกวันที่" value="2025-01-22">
 
-            <div class="content">
-                <div class="filter-sidebar" id="filterSidebar">
-                    <div class="sidebar-header">
-                        <h2>ตัวกรอง</h2>
-                        <button class="close-sidebar">&times;</button>
-                    </div>
-                    <form method="post" action="">
-                        <div class="sidebar-content">
-                            <!-- ใส่ Filter ตรงนี้ -->
-                            <label for="month_year">ปี/เดือน:</label>
-                            <input type="month" name="month_year" value="2025-01"> ถึง
-                            <!-- <input class="month-selected" id="calendarSelect" type="text" placeholder="ปี/เดือน" value="2025-01"> -->
+                    <label for="filter-gender">เพศ:</label>
+                    <select id="filter-gender-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_gender == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <option value="ชาย" <?php if ($selected_gender == "ชาย") echo "selected"; ?>>ชาย</option>
+                        <option value="หญิง" <?php if ($selected_gender == "หญิง") echo "selected"; ?>>หญิง</option>
+                    </select>
 
-                            <label for="type">เพศ:</label>
-                            <select id="" class="filter-select" name="gender">
-                                <option value="ทั้งหมด" <?php echo ($gender == '' ? 'selected' : ''); ?>>ทั้งหมด</option>
-                                <option value="ชาย" <?php echo ($gender == 'ชาย' ? 'selected' : ''); ?>>ชาย</option>
-                                <option value="หญิง" <?php echo ($gender == 'หญิง' ? 'selected' : ''); ?>>หญิง</option>
-                            </select>
+                    <!-- แก้เป็น radio -->
+                    <label>ช่วงอายุ:</label>
+                    <input type="number" id="minAge" class="age-input" value="<?php echo $min_age; ?>" min="0" max="100">
+                    <span>ถึง</span>
+                    <input type="number" id="maxAge" class="age-input" value="<?php echo $max_age; ?>" min="0" max="100">
+                    <span>ปี</span>
+                    <br><br>
 
+                    <label for="filter-symtom">สาเหตุ/อาการป่วย:</label>
+                    <select id="filter-symtom-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_symptom == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <option value="อุบัติเหตุ" <?php if ($selected_symptom == "อุบัติเหตุ") echo "selected"; ?>>อุบัติเหตุ</option>
+                        <option value="อาการป่วย" <?php if ($selected_symptom == "อาการป่วย") echo "selected"; ?>>อาการป่วย</option>
+                        <option value="อื่นๆ" <?php if ($selected_symptom == "อื่นๆ") echo "selected"; ?>>อื่นๆ</option>
+                    </select>
 
-                            <label for="type">ประเภทสินค้า:</label>
-                            <select id="" class="filter-select" name="type">
-                                <option value="ทั้งหมด" <?php echo ($type == '' ? 'selected' : ''); ?>>ทั้งหมด</option>
-                                <option value="อุปกรณ์วัดและตรวจสุขภาพ" <?php echo ($type == 'อุปกรณ์วัดและตรวจสุขภาพ' ? 'selected' : ''); ?>>อุปกรณ์วัดและตรวจสุขภาพ</option>
-                                <option value="อุปกรณ์ช่วยการเคลื่อนไหว" <?php echo ($type == 'อุปกรณ์ช่วยการเคลื่อนไหว' ? 'selected' : ''); ?>>อุปกรณ์ช่วยการเคลื่อนไหว</option>
-                                <option value="อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด" <?php echo ($type == 'อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด' ? 'selected' : ''); ?>>อุปกรณ์สำหรับการฟื้นฟูและกายภาพบำบัด</option>
-                                <option value="อุปกรณ์ดูแลสุขอนามัย" <?php echo ($type == 'อุปกรณ์ดูแลสุขอนามัย' ? 'selected' : ''); ?>>อุปกรณ์ดูแลสุขอนามัย</option>
-                                <option value="อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ" <?php echo ($type == 'อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ' ? 'selected' : ''); ?>>อุปกรณ์ช่วยหายใจและระบบทางเดินหายใจ</option>
-                                <option value="อุปกรณ์ปฐมพยาบาล" <?php echo ($type == 'อุปกรณ์ปฐมพยาบาล' ? 'selected' : ''); ?>>อุปกรณ์ปฐมพยาบาล</option>
-                            </select>
+                    <label for="filter-hospital">โรงพยาบาล:</label>
+                    <select id="filter-hospital-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_hospital == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <?php foreach ($hospital_options as $hospital) : ?>
+                            <option value="<?php echo $hospital; ?>" <?php if ($selected_hospital == $hospital) echo "selected"; ?>>
+                                <?php echo $hospital; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
 
-                            <!-- <label for="">ช่วงราคาสินค้า:</label>
-                        <div class="price-range">
-                            <input type="number" id="minPrice" placeholder="ต่ำสุด" min="0" max="1000000" value="0">
-                            <input type="range" id="minPriceRange" min="0" max="1000000" step="100" value="0" oninput="updateMinPrice()">
-                            <input type="range" id="maxPriceRange" min="0" max="1000000" step="100" value="1000000" oninput="updateMaxPrice()">
-                            <input type="number" id="maxPrice" placeholder="สูงสุด" min="0" max="1000000" value="1000000">
-                        </div><br> -->
-
-                            <label for="price">ช่วงราคา :</label>
-                            <label for="min_price">ราคา (ต่ำสุด):</label>
-                            <input type="number" name="min_price" value="1" min="1" max="1000000">
-
-                            <label for="max_price">ราคา (สูงสุด):</label>
-                            <input type="number" name="max_price" value="1000000" min="1" max="1000000">
-
-                            <label for="province">จังหวัด:</label>
-                            <select id="filter-price-list" class="filter-select" name="province">
-                                <option value="" selected hidden>ทั้งหมด</option>
-                                <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
-                                <option value="กระบี่">กระบี่</option>
-                                <option value="กาญจนบุรี">กาญจนบุรี</option>
-                                <option value="กาฬสินธุ์">กาฬสินธุ์</option>
-                                <option value="กำแพงเพชร">กำแพงเพชร</option>
-                                <option value="ขอนแก่น">ขอนแก่น</option>
-                                <option value="จันทบุรี">จันทบุรี</option>
-                                <option value="ฉะเชิงเทรา">ฉะเชิงเทรา</option>
-                                <option value="ชลบุรี">ชลบุรี</option>
-                                <option value="ชัยนาท">ชัยนาท</option>
-                                <option value="ชัยภูมิ">ชัยภูมิ</option>
-                                <option value="ชุมพร">ชุมพร</option>
-                                <option value="เชียงราย">เชียงราย</option>
-                                <option value="เชียงใหม่">เชียงใหม่</option>
-                                <option value="ตรัง">ตรัง</option>
-                                <option value="ตราด">ตราด</option>
-                                <option value="ตาก">ตาก</option>
-                                <option value="นครนายก">นครนายก</option>
-                                <option value="นครปฐม">นครปฐม</option>
-                                <option value="นครพนม">นครพนม</option>
-                                <option value="นครราชสีมา">นครราชสีมา</option>
-                                <option value="นครศรีธรรมราช">นครศรีธรรมราช</option>
-                                <option value="นครสวรรค์">นครสวรรค์</option>
-                                <option value="นนทบุรี">นนทบุรี</option>
-                                <option value="นราธิวาส">นราธิวาส</option>
-                                <option value="น่าน">น่าน</option>
-                                <option value="บึงกาฬ">บึงกาฬ</option>
-                                <option value="บุรีรัมย์">บุรีรัมย์</option>
-                                <option value="ปทุมธานี">ปทุมธานี</option>
-                                <option value="ประจวบคีรีขันธ์">ประจวบคีรีขันธ์</option>
-                                <option value="ปราจีนบุรี">ปราจีนบุรี</option>
-                                <option value="ปัตตานี">ปัตตานี</option>
-                                <option value="พะเยา">พะเยา</option>
-                                <option value="พระนครศรีอยุธยา">พระนครศรีอยุธยา</option>
-                                <option value="พังงา">พังงา</option>
-                                <option value="พัทลุง">พัทลุง</option>
-                                <option value="พิจิตร">พิจิตร</option>
-                                <option value="พิษณุโลก">พิษณุโลก</option>
-                                <option value="เพชรบุรี">เพชรบุรี</option>
-                                <option value="เพชรบูรณ์">เพชรบูรณ์</option>
-                                <option value="แพร่">แพร่</option>
-                                <option value="ภูเก็ต">ภูเก็ต</option>
-                                <option value="มหาสารคาม">มหาสารคาม</option>
-                                <option value="มุกดาหาร">มุกดาหาร</option>
-                                <option value="แม่ฮ่องสอน">แม่ฮ่องสอน</option>
-                                <option value="ยโสธร">ยโสธร</option>
-                                <option value="ยะลา">ยะลา</option>
-                                <option value="ร้อยเอ็ด">ร้อยเอ็ด</option>
-                                <option value="ระนอง">ระนอง</option>
-                                <option value="ระยอง">ระยอง</option>
-                                <option value="ราชบุรี">ราชบุรี</option>
-                                <option value="ลพบุรี">ลพบุรี</option>
-                                <option value="ลำปาง">ลำปาง</option>
-                                <option value="ลำพูน">ลำพูน</option>
-                                <option value="เลย">เลย</option>
-                                <option value="ศรีสะเกษ">ศรีสะเกษ</option>
-                                <option value="สกลนคร">สกลนคร</option>
-                                <option value="สงขลา">สงขลา</option>
-                                <option value="สตูล">สตูล</option>
-                                <option value="สมุทรปราการ">สมุทรปราการ</option>
-                                <option value="สมุทรสงคราม">สมุทรสงคราม</option>
-                                <option value="สมุทรสาคร">สมุทรสาคร</option>
-                                <option value="สระแก้ว">สระแก้ว</option>
-                                <option value="สระบุรี">สระบุรี</option>
-                                <option value="สิงห์บุรี">สิงห์บุรี</option>
-                                <option value="สุโขทัย">สุโขทัย</option>
-                                <option value="สุพรรณบุรี">สุพรรณบุรี</option>
-                                <option value="สุราษฎร์ธานี">สุราษฎร์ธานี</option>
-                                <option value="สุรินทร์">สุรินทร์</option>
-                                <option value="หนองคาย">หนองคาย</option>
-                                <option value="หนองบัวลำภู">หนองบัวลำภู</option>
-                                <option value="อ่างทอง">อ่างทอง</option>
-                                <option value="อุดรธานี">อุดรธานี</option>
-                                <option value="อุตรดิตถ์">อุตรดิตถ์</option>
-                                <option value="อุทัยธานี">อุทัยธานี</option>
-                                <option value="อุบลราชธานี">อุบลราชธานี</option>
-                                <option value="อำนาจเจริญ">อำนาจเจริญ</option>
-                            </select>
-                            <input type="submit" value="กรองข้อมูล">
-                    </form>
+                    <label for="filter-zone">เขตพื้นที่เกิดเหตุ:</label>
+                    <select id="filter-zone-list" class="filter-select">
+                        <option value="ทั้งหมด" <?php if ($selected_zone == "ทั้งหมด") echo "selected"; ?>>ทั้งหมด</option>
+                        <?php foreach ($zone_options as $zone) : ?>
+                            <option value="<?php echo $zone; ?>" <?php if ($selected_zone == $zone) echo "selected"; ?>>
+                                <?php echo $zone; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
+        </div>
     </main>
-    <canvas id="orderChart"></canvas> <!-- ส่วนแสดงกราฟ -->
-    <?php
-    // สมมติว่าเรามีตัวแปรเพศและเดือนจากการเลือก
-    $selectedGender = $_POST['gender'] ?? ''; // ได้ข้อมูลเพศจากการเลือก
-    $selectedMonth = $_POST['month'] ?? ''; // ได้ข้อมูลเดือนจากการเลือก
 
-    if ($result->num_rows > 0) {
-        // สร้างตัวแปรเก็บข้อมูล
-        $types = [];
-        $prices = [];
-        $genders = [];
-        $provinces = [];
-        $orderDates = [];
+    <canvas id="case"></canvas>
 
-        while ($row = $result->fetch_assoc()) {
-            $orderMonth = (new DateTime($row['order_date']))->format('n'); // แปลงเดือนจากวันที่
-            $gender = $row['member_gender'];
-
-            // เพิ่มข้อมูลทั้งหมดก่อนกรอง
-            $types[] = $row['equipment_type'] ?? 'No Type';
-            $prices[] = $row['order_total'] ?? 0;
-            $genders[] = $gender;
-            $provinces[] = $row['member_province'] ?? 'No Province';
-            $orderDates[] = $row['order_date'] ?? 'No Date';
-        }
-
-        // แปลงข้อมูลเป็น JSON
-        $types_json = json_encode($types);
-        $prices_json = json_encode($prices);
-        $genders_json = json_encode($genders);
-        $provinces_json = json_encode($provinces);
-        $orderDates_json = json_encode($orderDates);
-    } else {
-        echo "No results found.";
-    }
-    ?>
     <script>
-        // รับข้อมูลจาก PHP
-        const types = <?php echo $types_json; ?>;
-        const prices = <?php echo $prices_json; ?>;
-        const genders = <?php echo $genders_json; ?>;
-        const provinces = <?php echo $provinces_json; ?>;
-        const orderDates = <?php echo $orderDates_json; ?>;
+        // รับข้อมูลจาก PHP เพื่อใช้ในกราฟ
+        const labels = <?php echo json_encode($labels); ?>;
+        const maleData = <?php echo json_encode($maleData); ?>;
+        const femaleData = <?php echo json_encode($femaleData); ?>;
 
-        // นับจำนวนการขายตามประเภทสินค้าและเดือน
-        const salesByMonthAndType = {};
-
-        // แปลงวันที่เป็นเดือนและคำนวณจำนวนการขายตามเดือน
-        orderDates.forEach((orderDate, index) => {
-            const orderMonth = new Date(orderDate).getMonth(); // แยกเดือนจากวันที่
-            const type = types[index];
-
-            // ตรวจสอบว่ามีข้อมูลนี้ใน salesByMonthAndType หรือไม่
-            if (!salesByMonthAndType[orderMonth]) {
-                salesByMonthAndType[orderMonth] = {};
-            }
-
-            if (!salesByMonthAndType[orderMonth][type]) {
-                salesByMonthAndType[orderMonth][type] = 0;
-            }
-
-            salesByMonthAndType[orderMonth][type] += 1; // เพิ่มจำนวนการขาย
-        });
-
-        // สร้างข้อมูลประเภทสินค้าทั้งหมด
-        const uniqueTypes = Array.from(new Set(types)); // สร้างรายการประเภทสินค้าไม่ซ้ำ
-
-        // สร้าง labels เป็นเดือน
-        const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-            'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-        ];
-
-        // สร้าง dataset สำหรับแต่ละประเภทสินค้า
-        const datasets = uniqueTypes.map(type => {
-            const salesCountByMonth = months.map((month, monthIndex) => {
-                return salesByMonthAndType[monthIndex] && salesByMonthAndType[monthIndex][type] ?
-                    salesByMonthAndType[monthIndex][type] :
-                    0; // หากไม่มีการขายในเดือนนั้นจะให้ค่าเป็น 0
-            });
-
-            // สุ่มสีให้แต่ละประเภทสินค้า
-            const backgroundColor = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.6)`;
-            const borderColor = backgroundColor.replace("0.6", "1"); // ทำให้สีขอบเข้มขึ้น
-
-            return {
-                label: `${type}`,
-                data: salesCountByMonth, // ข้อมูลจำนวนการขายตามเดือน
-                backgroundColor: backgroundColor,
-                borderColor: borderColor,
-                borderWidth: 1
-            };
-        });
-
-        // สร้าง Bar Chart
-        const ctx = document.getElementById("orderChart").getContext("2d");
-        const orderChart = new Chart(ctx, {
+        // สร้างกราฟด้วย Chart.js
+        const mychart = new Chart(document.getElementById("case"), {
             type: 'bar',
             data: {
-                labels: months, // แสดงเดือนในแกน X
-                datasets: datasets // ข้อมูลการขายของแต่ละประเภทสินค้า
+                labels: labels,
+                datasets: [{
+                    label: 'ชาย',
+                    data: maleData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }, {
+                    label: 'หญิง',
+                    data: femaleData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: true,
+                    x: {
+                        stacked: true,
                         title: {
                             display: true,
-                            text: 'จำนวนการขาย (รายการ)'
+                            text: 'สาเหตุการแจ้งเหตุ'
                         }
                     },
-                    x: {
+                    y: {
+                        stacked: true,
                         title: {
                             display: true,
-                            text: 'เดือน'
-                        },
-                        ticks: {
-                            autoSkip: false, // ปิดการย่อขนาดตัวอักษรอัตโนมัติ
-                            maxRotation: 45, // หมุนชื่อเดือนในแกน X
-                            minRotation: 0
-                        },
-                        barThickness: 'flex', // ปรับความหนาของแท่งให้เหมาะสม
+                            text: 'จำนวนผู้ป่วย'
+                        }
                     }
                 },
                 plugins: {
-                    legend: {
-                        position: 'top', // วาง legend ที่ด้านบน
-                        labels: {
-                            color: 'black', // เปลี่ยนสีข้อความใน legend
-                            boxWidth: 10, // ขนาดของ box ใน legend
-                            padding: 15
-                        }
-                    },
                     title: {
                         display: true,
-                        text: 'จำนวนยอดขาย'
+                        text: 'สถิติผู้ป่วยฉุกเฉินแยกตามสาเหตุและเพศ',
+                        font: {
+                            size: 18
+                        }
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: (tooltipItem) => {
-                                let type = uniqueTypes[tooltipItem.dataIndex];
-                                let count = tooltipItem.raw;
-                                return [
-                                    `ประเภท: ${type}`,
-                                    `จำนวนการขาย: ${count} รายการ`
-                                ];
-                            }
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 20,
+                            padding: 15
                         }
                     }
                 }
             }
         });
 
-        // ฟังก์ชันกรองข้อมูลตามตัวเลือก
-        function filterData() {
-            const filteredTypes = types.filter((_, index) => {
-                const orderMonth = new Date(orderDates[index]).getMonth();
-                const gender = genders[index];
+        // สคริปต์สำหรับเปิด-ปิด Sidebar
+        document.addEventListener("DOMContentLoaded", () => {
+            const filterIcon = document.querySelector(".filter-icon");
+            const sidebar = document.getElementById("filterSidebar");
+            const closeSidebar = document.querySelector(".close-sidebar");
 
-                const genderMatches = !selectedGender || gender === selectedGender;
-                const monthMatches = !selectedMonth || orderMonth === selectedMonth;
-
-                return genderMatches && monthMatches;
+            // เปิด Sidebar
+            filterIcon.addEventListener("click", () => {
+                sidebar.classList.add("open");
             });
 
-            // สร้างกราฟใหม่จากข้อมูลที่กรองแล้ว
-            updateChart(filteredTypes);
+            // ปิด Sidebar
+            closeSidebar.addEventListener("click", () => {
+                sidebar.classList.remove("open");
+            });
+
+            // ปิด Sidebar เมื่อคลิกนอก Sidebar
+            document.addEventListener("click", (e) => {
+                if (!sidebar.contains(e.target) && !filterIcon.contains(e.target)) {
+                    sidebar.classList.remove("open");
+                }
+            });
+        });
+
+        // ตั้งค่า Flatpickr สำหรับเลือกวันที่
+        flatpickr("#calendarSelect", {
+            dateFormat: "Y-m-d",
+            defaultDate: "<?php echo $selected_date; ?>",
+            onChange: updateFilters
+        });
+
+        // ฟังก์ชันสำหรับอัปเดตฟิลเตอร์และโหลดข้อมูลใหม่
+        function updateFilters() {
+            const date = document.getElementById("calendarSelect").value;
+            const gender = document.getElementById("filter-gender-list").value;
+            const minAge = document.getElementById("minAge").value;
+            const maxAge = document.getElementById("maxAge").value;
+            const symptom = document.getElementById("filter-symtom-list").value;
+            const hospital = document.getElementById("filter-hospital-list").value;
+            const zone = document.getElementById("filter-zone-list").value;
+
+            // สร้าง URL Query
+            const params = new URLSearchParams({
+                date,
+                gender,
+                min_age: minAge,
+                max_age: maxAge,
+                symptom,
+                hospital,
+                zone
+            });
+
+            // อัปเดต URL โดยไม่โหลดหน้าใหม่
+            const newUrl = window.location.pathname + "?" + params.toString();
+            window.history.replaceState({}, "", newUrl);
+
+            // โหลดข้อมูลใหม่ผ่าน AJAX
+            fetch(newUrl)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+
+                    // อัปเดตข้อมูลกราฟใหม่
+                    const newLabels = JSON.parse(doc.getElementById('chart-labels').textContent);
+                    const newMaleData = JSON.parse(doc.getElementById('chart-maleData').textContent);
+                    const newFemaleData = JSON.parse(doc.getElementById('chart-femaleData').textContent);
+
+                    // อัปเดตกราฟ Chart.js
+                    mychart.data.labels = newLabels;
+                    mychart.data.datasets[0].data = newMaleData;
+                    mychart.data.datasets[1].data = newFemaleData;
+                    mychart.update();
+                })
+                .catch(error => console.error('Error fetching updated data:', error));
         }
 
-        // เรียกใช้งานฟังก์ชันกรองเมื่อเลือกตัวกรอง
-        document.getElementById("filterButton").addEventListener("click", filterData);
+        // ตั้งค่า Event Listeners สำหรับฟิลเตอร์
+        document.getElementById("calendarSelect").flatpickr({
+            dateFormat: "Y-m-d",
+            onChange: updateFilters
+        });
+        document.getElementById("filter-gender-list").addEventListener("change", updateFilters);
+        document.getElementById("filter-symtom-list").addEventListener("change", updateFilters);
+        document.getElementById("minAge").addEventListener("input", updateFilters);
+        document.getElementById("maxAge").addEventListener("input", updateFilters);
+        document.getElementById("filter-hospital-list").addEventListener("change", updateFilters);
+        document.getElementById("filter-zone-list").addEventListener("change", updateFilters);
     </script>
-
-
 </body>
 
 </html>
