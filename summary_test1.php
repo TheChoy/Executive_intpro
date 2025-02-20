@@ -30,15 +30,15 @@ if ($selected_hospital !== "ทั้งหมด") {
     $where_clause .= " AND emergency_case_report_hospital_waypoint = '$selected_hospital'";
 }
 if ($selected_zone !== "ทั้งหมด") {
-    $where_clause .= " AND emergency_case_emergency_case_zone = '$selected_zone'";
+    $where_clause .= " AND emergency_case_report_zone = '$selected_zone'";
 }
 
 // Query ดึงข้อมูล
 $sql = "SELECT 
-    report_reason,
+    emergency_case_report_reason,
     SUM(CASE WHEN emergency_case_report_patient_gender = 'ชาย' THEN 1 ELSE 0 END) as male_count,
     SUM(CASE WHEN emergency_case_report_patient_gender = 'หญิง' THEN 1 ELSE 0 END) as female_count
-    FROM emergency_case 
+    FROM emergency_case_report 
     $where_clause
     GROUP BY emergency_case_report_reason";
 
@@ -58,24 +58,24 @@ if ($result->num_rows > 0) {
 }
 
 // Query ดึงข้อมูลโรงพยาบาล
-$hospital_query = "SELECT DISTINCT hospital_waypoint FROM emergency_case";
+$hospital_query = "SELECT DISTINCT emergency_case_report_hospital_waypoint FROM emergency_case_report";
 $hospital_result = $conn->query($hospital_query);
 
 $hospital_options = [];
 if ($hospital_result->num_rows > 0) {
     while ($row = $hospital_result->fetch_assoc()) {
-        $hospital_options[] = $row['hospital_waypoint'];
+        $hospital_options[] = $row['emergency_case_report_hospital_waypoint'];
     }
 }
 
 // Query ดึงข้อมูลเขตพื้นที่เกิดเหตุ
-$zone_query = "SELECT DISTINCT emergency_case_zone FROM emergency_case";
+$zone_query = "SELECT DISTINCT emergency_case_report_zone FROM emergency_case_report";
 $zone_result = $conn->query($zone_query);
 
 $zone_options = [];
 if ($zone_result->num_rows > 0) {
     while ($row = $zone_result->fetch_assoc()) {
-        $zone_options[] = $row['emergency_case_zone'];
+        $zone_options[] = $row['emergency_case_report_zone'];
     }
 }
 
