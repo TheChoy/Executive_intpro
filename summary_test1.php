@@ -138,7 +138,6 @@ $conn->close();
             border-radius: 4px;
             border: 1px solid #ddd;
         }
-
     </style>
 </head>
 
@@ -180,6 +179,8 @@ $conn->close();
                     <button class="close-sidebar">&times;</button>
                 </div>
                 <div class="sidebar-content">
+
+                
                     <label for="calendarSelect">เลือกวันที่:</label>
                     <input class="calendar-selected" id="calendarSelect" type="text" placeholder="เลือกวันที่" value="2025-01-22">
 
