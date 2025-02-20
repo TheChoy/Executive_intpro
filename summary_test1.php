@@ -158,6 +158,11 @@ $conn->close();
                 <i class="fa-solid fa-filter"></i> <!-- ไอคอน Filter -->
             </div>
 
+
+
+
+
+            <!-- filter -->
             <div class="filter-sidebar" id="filterSidebar">
                 <div class="sidebar-header">
                     <h2>ตัวกรอง</h2>
@@ -216,6 +221,8 @@ $conn->close();
 
     <canvas id="case"></canvas>
 
+
+    <!-- graph -->
     <script>
         // รับข้อมูลจาก PHP เพื่อใช้ในกราฟ
         const labels = <?php echo json_encode($labels); ?>;
