@@ -1,6 +1,17 @@
 <?php
 // ตั้งค่าการเชื่อมต่อฐานข้อมูล
-include('username.php');
+$host = 'localhost';
+$user = 'root';
+$password = '';
+$database = 'intpro';
+
+// สร้างการเชื่อมต่อฐานข้อมูล
+$conn = new mysqli($host, $user, $password, $database);
+
+// ตรวจสอบการเชื่อมต่อ
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
 
 // รับค่าฟิลเตอร์จาก GET parameters
 $min_age = isset($_GET['min_age']) ? (int)$_GET['min_age'] : 0;
@@ -12,35 +23,35 @@ $selected_hospital = isset($_GET['hospital']) ? $_GET['hospital'] : "ทั้�
 $selected_zone = isset($_GET['zone']) ? $_GET['zone'] : "ทั้งหมด";
 
 // สร้าง WHERE Clause ตามฟิลเตอร์ที่เลือก
-$where_clause = "WHERE emergency_case_report_patient_age BETWEEN $min_age AND $max_age";
+$where_clause = "WHERE report_patient_age BETWEEN $min_age AND $max_age";
 if ($selected_date) {
-    $where_clause .= " AND DATE(emergency_case_report_date) = '$selected_date'";
+    $where_clause .= " AND DATE(report_date) = '$selected_date'";
 }
 if ($selected_gender !== "ทั้งหมด") {
-    $where_clause .= " AND emergency_case_report_patient_gender = '$selected_gender'";
+    $where_clause .= " AND report_patient_gender = '$selected_gender'";
 }
 if ($selected_symptom !== "ทั้งหมด") {
     if ($selected_symptom === "อื่นๆ") {
-        $where_clause .= " AND emergency_case_report_reason NOT LIKE '%อุบัติเหตุ%' AND emergency_case_report_reason NOT LIKE '%อาการป่วย%'";
+        $where_clause .= " AND report_reason NOT LIKE '%อุบัติเหตุ%' AND report_reason NOT LIKE '%อาการป่วย%'";
     } else {
-        $where_clause .= " AND emergency_case_report_reason LIKE '%$selected_symptom%'";
+        $where_clause .= " AND report_reason LIKE '%$selected_symptom%'";
     }
 }
 if ($selected_hospital !== "ทั้งหมด") {
-    $where_clause .= " AND emergency_case_report_hospital_waypoint = '$selected_hospital'";
+    $where_clause .= " AND hospital_waypoint = '$selected_hospital'";
 }
 if ($selected_zone !== "ทั้งหมด") {
-    $where_clause .= " AND emergency_case_emergency_case_zone = '$selected_zone'";
+    $where_clause .= " AND emergency_case_zone = '$selected_zone'";
 }
 
 // Query ดึงข้อมูล
 $sql = "SELECT 
     report_reason,
-    SUM(CASE WHEN emergency_case_report_patient_gender = 'ชาย' THEN 1 ELSE 0 END) as male_count,
-    SUM(CASE WHEN emergency_case_report_patient_gender = 'หญิง' THEN 1 ELSE 0 END) as female_count
+    SUM(CASE WHEN report_patient_gender = 'ชาย' THEN 1 ELSE 0 END) as male_count,
+    SUM(CASE WHEN report_patient_gender = 'หญิง' THEN 1 ELSE 0 END) as female_count
     FROM emergency_case 
     $where_clause
-    GROUP BY emergency_case_report_reason";
+    GROUP BY report_reason";
 
 $result = $conn->query($sql);
 
