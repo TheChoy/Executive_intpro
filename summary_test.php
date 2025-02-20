@@ -276,109 +276,67 @@ $result = mysqli_query($conn, $sql);
 
         // แปลงวันที่เป็นเดือนและคำนวณจำนวนการขายตามเดือน
         orderDates.forEach((orderDate, index) => {
-            const orderMonth = new Date(orderDate).getMonth(); // แยกเดือนจากวันที่
+            const orderMonth = new Date(orderDate).getMonth(); // แยกเดือนจากวันที่ (0 = ม.ค.)
             const type = types[index];
 
-            // ตรวจสอบว่ามีข้อมูลนี้ใน salesByMonthAndType หรือไม่
-            if (!salesByMonthAndType[orderMonth]) {
-                salesByMonthAndType[orderMonth] = {};
+            if (!salesByMonthAndType[type]) {
+                salesByMonthAndType[type] = Array(12).fill(0); // สร้าง array 12 ช่อง (ม.ค.-ธ.ค.)
             }
-
-            if (!salesByMonthAndType[orderMonth][type]) {
-                salesByMonthAndType[orderMonth][type] = 0;
-            }
-
-            salesByMonthAndType[orderMonth][type] += 1; // เพิ่มจำนวนการขาย
+            salesByMonthAndType[type][orderMonth] += 1; // เพิ่มจำนวนการขาย
         });
 
-        // สร้างข้อมูลประเภทสินค้าทั้งหมด
-        const uniqueTypes = Array.from(new Set(types)); // สร้างรายการประเภทสินค้าไม่ซ้ำ
+        // สร้าง object สำหรับเก็บจำนวนออเดอร์ตามประเภทอุปกรณ์
+        const salesByType = {};
 
-        // สร้าง labels เป็นเดือน
-        const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-            'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-        ];
-
-        // สร้าง dataset สำหรับแต่ละประเภทสินค้า
-        const datasets = uniqueTypes.map(type => {
-            const salesCountByMonth = months.map((month, monthIndex) => {
-                return salesByMonthAndType[monthIndex] && salesByMonthAndType[monthIndex][type] ?
-                    salesByMonthAndType[monthIndex][type] :
-                    0; // หากไม่มีการขายในเดือนนั้นจะให้ค่าเป็น 0
-            });
-
-            // สุ่มสีให้แต่ละประเภทสินค้า
-            const backgroundColor = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.6)`;
-            const borderColor = backgroundColor.replace("0.6", "1"); // ทำให้สีขอบเข้มขึ้น
-
-            return {
-                label: `${type}`,
-                data: salesCountByMonth, // ข้อมูลจำนวนการขายตามเดือน
-                backgroundColor: backgroundColor,
-                borderColor: borderColor,
-                borderWidth: 1
-            };
+        // นับจำนวนการขายตามประเภทอุปกรณ์
+        types.forEach((type, index) => {
+            if (!salesByType[type]) {
+                salesByType[type] = 0;
+            }
+            salesByType[type] += 1; // เพิ่มจำนวนออเดอร์ของประเภทนั้นๆ
         });
 
-        // สร้าง Bar Chart
-        const ctx = document.getElementById("orderChart").getContext("2d");
-        const orderChart = new Chart(ctx, {
+        // แปลงข้อมูลเป็น Array สำหรับ Chart.js
+        const labels = Object.keys(salesByType); // ประเภทอุปกรณ์ (แกน X)
+        const data = Object.values(salesByType); // จำนวนออเดอร์ (แกน Y)
+
+        // กำหนดสีสำหรับแต่ละประเภทอุปกรณ์
+        const colors = labels.map(() => `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.6)`);
+
+        // แสดงผลกราฟ
+        const ctx = document.getElementById('orderChart').getContext('2d');
+        new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: months, // แสดงเดือนในแกน X
-                datasets: datasets // ข้อมูลการขายของแต่ละประเภทสินค้า
+                labels: labels, // ประเภทอุปกรณ์เป็นแกน X
+                datasets: [{
+                    label: 'จำนวนการขาย',
+                    data: data, // จำนวนออเดอร์เป็นแกน Y
+                    backgroundColor: colors,
+                    borderColor: colors.map(color => color.replace('0.6', '1')),
+                    borderWidth: 1
+                }]
             },
             options: {
                 responsive: true,
                 scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'ประเภทอุปกรณ์'
+                        }
+                    },
                     y: {
                         beginAtZero: true,
                         title: {
                             display: true,
-                            text: 'จำนวนการขาย (รายการ)'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'เดือน'
-                        },
-                        ticks: {
-                            autoSkip: false, // ปิดการย่อขนาดตัวอักษรอัตโนมัติ
-                            maxRotation: 45, // หมุนชื่อเดือนในแกน X
-                            minRotation: 0
-                        },
-                        barThickness: 'flex', // ปรับความหนาของแท่งให้เหมาะสม
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top', // วาง legend ที่ด้านบน
-                        labels: {
-                            color: 'black', // เปลี่ยนสีข้อความใน legend
-                            boxWidth: 10, // ขนาดของ box ใน legend
-                            padding: 15
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'จำนวนยอดขายตามประเภทสินค้า'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (tooltipItem) => {
-                                let type = uniqueTypes[tooltipItem.dataIndex];
-                                let count = tooltipItem.raw;
-                                return [
-                                    `ประเภท: ${type}`,
-                                    `จำนวนการขาย: ${count} รายการ`
-                                ];
-                            }
+                            text: 'จำนวนออเดอร์'
                         }
                     }
                 }
             }
         });
+
 
         // ฟังก์ชันกรองข้อมูลตามตัวเลือก
         function filterData() {
