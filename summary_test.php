@@ -223,6 +223,10 @@ $result = mysqli_query($conn, $sql);
                 </div>
             </div>
     </main>
+
+
+
+
     <canvas id="orderChart"></canvas> <!-- ส่วนแสดงกราฟ -->
     <?php
     // สมมติว่าเรามีตัวแปรเพศและเดือนจากการเลือก
@@ -358,7 +362,7 @@ $result = mysqli_query($conn, $sql);
                     },
                     title: {
                         display: true,
-                        text: 'จำนวนการขายตามประเภทสินค้า'
+                        text: 'จำนวนยอดขายตามประเภทสินค้า'
                     },
                     tooltip: {
                         callbacks: {
