@@ -280,6 +280,10 @@ $conn->close();
                         title: {
                             display: true,
                             text: 'จำนวนยอดสินค้า'
+                        },
+                        ticks: {
+                            beginAtZero: true,
+                            stepSize: 1
                         }
                     }
                 },
